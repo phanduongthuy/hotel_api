@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Jenssegers\Mongodb\Eloquent\Model;
+
+class NotificationPopup extends Model
+{
+    use HasFactory;
+
+    protected $table = "notification_popups";
+
+    protected $fillable = [
+        'name',
+        'code',
+        'group_code',
+        'description',
+        'content'
+    ];
+}

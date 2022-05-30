@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Http\Requests\User\Info;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class ChangePasswordRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * @return bool
+     */
+    public function authorize()
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array
+     */
+    public function rules()
+    {
+        return [
+            'current_password'  => 'required',
+            'password'          => 'required|min:6|confirmed',
+        ];
+    }
+
+    /**
+     * Get custom attributes for validator errors.
+     *
+     * @return array
+     */
+    public function attributes()
+    {
+        return [
+            'current_password'  => 'Mật khẩu hiện tại',
+            'password'          => 'Mật khẩu',
+        ];
+    }
+}

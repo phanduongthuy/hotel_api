@@ -72,15 +72,16 @@ Route::group(['middleware' => ['api']], function () {
 
             Route::group(['prefix' => '/orders'], function () {
                 Route::get('/',[OrderController::class,'index']);
-                Route::get('/not-quote',[OrderController::class,'getOrderNotQuote']);
+                Route::get('/order-request',[OrderController::class,'getOrderRequest']);
                 Route::put('/',[OrderController::class,'update']);
+                Route::post('/confirm/{id}',[OrderController::class,'confirmOrderRequest']);
+                Route::post('/cancel/{id}',[OrderController::class,'cancelOrderRequest']);
                 Route::get('/count-order', [OrderController::class, 'countOrder']);
                 Route::get('/get-revenue', [OrderController::class, 'getTotalRevenue']);
-                Route::get('/statistic-order', [OrderController::class, 'orderStatistics']);
             });
 
             Route::group(['prefix' => '/permissions'], function () {
-                Route::get('/',[Admin\PermissionController::class,'index'])->middleware('checkPermission:get-permissions');
+                Route::get('/',[Admin\PermissionController::class,'index']);
             });
 
             Route::group(['prefix' => 'feedbacks'], function () {
@@ -140,12 +141,6 @@ Route::group(['middleware' => ['api']], function () {
             });
 
 
-            Route::group(['prefix' => 'footers'], function () {
-                Route::get('/get-data', [Admin\FooterController::class, 'getFooterInfo']);
-                Route::post('/', [Admin\FooterController::class, 'handleCreateAndUpdateFooter']);
-            });
-
-
             Route::group(['prefix' => 'price-list'],function(){
                 Route::get('/',[Admin\PriceListController::class,'index']);
                 Route::post('/store',[Admin\PriceListController::class,'store']);
@@ -156,6 +151,15 @@ Route::group(['middleware' => ['api']], function () {
                 Route::post('/',[Admin\CategoryController::class,'store']);
                 Route::put('/{id}',[Admin\CategoryController::class,'update']);
                 Route::delete('/{id}',[Admin\CategoryController::class,'destroy']);
+                Route::get('/all',[Admin\CategoryController::class,'getAllCategories']);
+            });
+
+            Route::group(['prefix' => 'rooms'],function(){
+                Route::get('/',[Admin\RoomController::class,'index']);
+                Route::post('/',[Admin\RoomController::class,'store']);
+                Route::put('/{id}',[Admin\RoomController::class,'update']);
+                Route::put('/{id}/active',[Admin\RoomController::class,'activeRoom']);
+                Route::delete('/{id}',[Admin\RoomController::class,'destroy']);
             });
         });
     });
@@ -245,3 +249,6 @@ Route::group(['middleware' => ['api']], function () {
 Route::post('support-request', [SupportRequestController::class, 'store']);
 Route::post('forgot-password', [UserController::class, 'forgotPassword']);
 Route::get('download-file/{id}', [DocumentController::class, 'downloadFile']);
+
+Route::get('get-all-category', [Admin\CategoryController::class,'getAllCategories']);
+Route::post('request-order-room', [OrderController::class,'store']);

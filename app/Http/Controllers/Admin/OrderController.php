@@ -27,14 +27,11 @@ class OrderController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Order::query()->with(['document' => function($q) {
-                $q->where('type', '=', Document::TYPE['REQUEST']);
-            }, 'languageNative', 'languageTranslate', 'user', 'feedback', 'result']);
+            $query = Order::query();
 
             if ($request->has('q') && strlen($request->input('q')) > 0) {
                 $query->where(function ($query) use ($request) {
-                    $query->where('file_name', 'LIKE', "%" . $request->input('q') . "%")
-                    ->orWhere('code', 'LIKE', "%" . $request->input('q') . "%");
+                    $query->where('customer_name', 'LIKE', "%" . $request->input('q') . "%");
                 });
             }
 
@@ -50,25 +47,7 @@ class OrderController extends Controller
                 });
             }
 
-            if ($request->has('native_language_id') && strlen($request->input('native_language_id')) > 0) {
-                $query->where(function ($query) use ($request) {
-                    $query->where('native_language_id', $request->input('native_language_id'));
-                });
-            }
-
-            if ($request->has('translate_language_id') && strlen($request->input('translate_language_id')) > 0) {
-                $query->where(function ($query) use ($request) {
-                    $query->where('translate_language_id', $request->input('translate_language_id'));
-                });
-            }
-
-            if ($request->has('deadline') && strlen($request->input('deadline')) > 0) {
-                $query->orderBy('deadline', $request->input('deadline'));
-            } else {
-                $query->orderBy('created_at', 'DESC');
-            }
-
-            $order = $query->paginate(config('constants.per_page'));
+            $order = $query->paginate(env('PER_PAGE'));
 
             return $this->responseSuccess($order);
         } catch (Exception $e) {
@@ -79,6 +58,41 @@ class OrderController extends Controller
             ]);
         }
     }
+
+    public function store(Request $request) {
+        try {
+            $user = User::where('phone', $request->phone)->first();
+            if ($user) {
+                $user->name = $request->customer_name;
+                $user->save();
+                $userId = $user->_id;
+            } else {
+                $userNew = new User();
+                $userNew->name = $request->customer_name;
+                $userNew->phone = $request->phone;
+                $userNew->save();
+                $userId = $userNew->_id;
+            }
+
+            $order = new Order();
+            $order->user_id = $userId;
+            $order->customer_name = $request->customer_name;
+            $order->type = $request->type == Order::TYPE['OVERNIGHT'] ? Order::TYPE['OVERNIGHT'] : Order::TYPE['HOURS'];
+            $order->status = Order::STATUS['REQUEST'];
+            $order->order_date = Carbon::now()->timestamp;
+            $order->save();
+
+            return $this->responseSuccess();
+        }catch (Exception $e) {
+            Log::error('Error request order!', [
+                'method' => __METHOD__,
+                'message' => $e->getMessage(),
+                'line' => __LINE__
+            ]);
+        }
+    }
+
+
 
     public function update(UpdateOrderRequest $request) {
         try {
@@ -145,51 +159,21 @@ class OrderController extends Controller
         }
     }
 
-    public function destroy($id) {
-        try {
-            $order = Order::find($id);
-            if ($order) {
-                if ($order->status == Order::STATUS['NO_PRICE'] || $order->status == Order::STATUS['ALREADY_PRICE']) {
-                    $this->destroyDocument($id);
-                    $order->delete();
-                    return $this->responseSuccess();
-                } else {
-                    return $this->responseError("You don't delete this order!", [], 404);
-                }
-            } else {
-                return $this->responseError('Order not found', [], 404);
-            }
 
-        }catch (Exception $e) {
-            Log::error('Error delete order!', [
-                'method' => __METHOD__,
-                'message' => $e->getMessage(),
-                'line' => __LINE__
-            ]);
-            return $this->responseError();
-        }
-    }
 
-    private function destroyDocument($id) {
-        $document = Document::where('order_id', $id)->first();
-        $oldFile = collect(Storage::disk('user_google')->listContents('/', false))
-            ->where('type', '=', 'file')
-            ->where('filename', '=', pathinfo($document->path['filename'], PATHINFO_FILENAME))
-            ->first();
-        if ($oldFile) {
-            Storage::disk('user_google')->delete($oldFile['path']);
-        }
-        $document->delete();
-    }
+
 
     public function countOrder() {
         try {
-            $orderAll = Order::all()->count();
-            $orderNotQuote = Order::where('status', Order::STATUS['NO_PRICE'])->count();
-
+            $orderAll       = Order::all()->count();
+            $orderRequest   = Order::where('status', Order::STATUS['REQUEST'])->count();
+            $orderSuccess   = Order::where('status', Order::STATUS['SUCCESS'])->count();
+            $orderCancel    = Order::where('status', Order::STATUS['CANCEL'])->count();
             $orders = [
-                'orderAll'  => $orderAll,
-                'orderNotQuote'  => $orderNotQuote
+                'orderAll'      =>  $orderAll,
+                'orderRequest'  =>  $orderRequest,
+                'orderSuccess'  =>  $orderSuccess,
+                'orderCancel'   =>  $orderCancel
             ];
             return $this->responseSuccess($orders);
         } catch (Exception $e) {
@@ -205,10 +189,9 @@ class OrderController extends Controller
 
     public function getTotalRevenue() {
         try {
-            $revenue = Order::whereIn('status', [
-                Order::STATUS['TRANSLATION_DONE'],
-                Order::STATUS['REVIEW_DONE']
-            ])->where('payment_status', Order::PAYMENT_STATUS['PAID'])->sum('total_price');
+            $revenue = Order::where('status', Order::STATUS['SUCCESS'])
+                ->where('payment_status', Order::PAYMENT_STATUS['PAID'])
+                ->sum('total_price');
             return $this->responseSuccess($revenue);
         } catch (Exception $e) {
             Log::error('Error get revenue!', [
@@ -220,40 +203,15 @@ class OrderController extends Controller
         }
     }
 
-    public function orderStatistics() {
-        try {
-            $statistics['orderNoPrice'] = Order::where('status', Order::STATUS['NO_PRICE'])->count();
-            $statistics['orderTranslating'] = Order::whereIn('status', [
-                Order::STATUS['TRANSLATING'],
-                Order::STATUS['REVIEWING']
-            ])->count();
-            $statistics['orderSuccess'] = Order::whereIn('status', [
-                Order::STATUS['TRANSLATION_DONE'],
-                Order::STATUS['REVIEW_DONE']
-            ])
-                ->where('payment_status', Order::PAYMENT_STATUS['PAID'])
-                ->count();
-            return $this->responseSuccess($statistics);
-        } catch (Exception $e) {
-            Log::error('Error get revenue!', [
-                'method' => __METHOD__,
-                'message' => $e->getMessage(),
-                'line' => __LINE__
-            ]);
-            return $this->responseError();
-        }
-    }
 
-    public function getOrderNotQuote(Request $request)
+    public function getOrderRequest(Request $request)
     {
         try {
-            $query = Order::where('status', Order::STATUS['NO_PRICE'])->with(['document' => function($q) {
-                $q->where('type', '=', Document::TYPE['REQUEST']);
-            }, 'languageNative', 'languageTranslate', 'user', 'feedback']);
+            $query = Order::query();
 
             if ($request->has('q') && strlen($request->input('q')) > 0) {
                 $query->where(function ($query) use ($request) {
-                    $query->where('file_name', 'LIKE', "%" . $request->input('q') . "%");
+                    $query->where('customer_name', 'LIKE', "%" . $request->input('q') . "%");
                 });
             }
 
@@ -263,25 +221,10 @@ class OrderController extends Controller
                 });
             }
 
-            if ($request->has('native_language_id') && strlen($request->input('native_language_id')) > 0) {
-                $query->where(function ($query) use ($request) {
-                    $query->where('native_language_id', $request->input('native_language_id'));
-                });
-            }
 
-            if ($request->has('translate_language_id') && strlen($request->input('translate_language_id')) > 0) {
-                $query->where(function ($query) use ($request) {
-                    $query->where('translate_language_id', $request->input('translate_language_id'));
-                });
-            }
-
-            if ($request->has('deadline') && strlen($request->input('deadline')) > 0) {
-                $query->orderBy('deadline', $request->input('deadline'));
-            } else {
-                $query->orderBy('created_at', 'DESC');
-            }
-
-            $order = $query->paginate(config('constants.per_page'));
+            $order = $query->where('status', Order::STATUS['REQUEST'])
+                ->with(['user'])
+                ->paginate(env('PER_PAGE'));
 
             return $this->responseSuccess($order);
         } catch (Exception $e) {
@@ -293,73 +236,49 @@ class OrderController extends Controller
         }
     }
 
-    private function sendMailUpdate($user, $file, $order, $emailTemp, $code = null, $linkDowload = null)
+    public function confirmOrderRequest($id)
     {
-        $data['email'] = $user->email;
-        $data['customer'] = $user->name != '' ? $user->name : $user->user_name;
-        $data['date'] = Carbon::now()->format('d/m/Y');
-        $data['type'] = $order->type == Order::TYPE['TRANSLATE'] ? 'Dịch' : 'Review';
-        $data['content'] = $emailTemp->content;
-        $data['subject'] = $emailTemp->subject;
-        if (str_contains( $data['content'], '{{TEN_KHACH_HANG}}')) {
-            $data['content'] = str_ireplace('{{TEN_KHACH_HANG}}', $user->name, $data['content']);
-        }
-        if (str_contains( $data['content'], '{{NGAY}}')) {
-            $data['content'] = str_ireplace('{{NGAY}}', Carbon::now()->format('d/m/Y'), $data['content']);
-        }
-
-        if ($linkDowload != null) {
-            if (str_contains( $data['content'], '{{FILE}}')) {
-                $data['content'] = str_ireplace('{{FILE}}', '<a href="'. $linkDowload
-                    .'" rel="noopener noreferrer" target="_blank"><strong>' . $file . '</strong></a>', $data['content']);
+        try {
+            $order = Order::find($id);
+            if($order) {
+                $order->status = Order::STATUS['CONFIRMED'];
+                $order->checkin_time = Carbon::now()->timestamp;
+                $order->admin_id = Auth()->guard('admins')->user()->_id;;
+                $order->save();
+                return $this->responseSuccess();
+            } else {
+                return $this->responseError('Không tìm thấy đơn hàng!', [], 404);
             }
-        } else {
-            if (str_contains( $data['content'], '{{FILE}}')) {
-                $data['content'] = str_ireplace('{{FILE}}', $file, $data['content']);
-            }
-        }
 
-        if (str_contains( $data['content'], '{{LOAI}}')) {
-            $data['content'] = str_ireplace('{{LOAI}}', $data['type'], $data['content']);
+        } catch (Exception $e) {
+            Log::error('Error confirm request!', [
+                'method' => __METHOD__,
+                'message' => $e->getMessage(),
+                'line' => __LINE__
+            ]);
+            return $this->responseError();
         }
-        if (str_contains( $data['content'], '{{THOI_HAN_NHAN_KET_QUA}}')) {
-            $data['content'] = str_ireplace('{{THOI_HAN_NHAN_KET_QUA}}', date('d/m/Y',
-                $order->deadline), $data['content']);
-        }
-        if (str_contains( $data['content'], '{{YEU_CAU_CHI_TIET}}')) {
-            $data['content'] = str_ireplace('{{YEU_CAU_CHI_TIET}}', $order->note, $data['content']);
-        }
-        if (str_contains( $data['content'], '{{SO_TRANG}}')) {
-            $data['content'] = str_ireplace('{{SO_TRANG}}', number_format($order->total_page), $data['content']);
-        }
-        if (str_contains( $data['content'], '{{DON_GIA}}')) {
-            $data['content'] = str_ireplace('{{DON_GIA}}', number_format($order->price_per_page), $data['content']);
-        }
-        if (str_contains( $data['content'], '{{TONG_THANH_TIEN}}')) {
-            $data['content'] = str_ireplace('{{TONG_THANH_TIEN}}', number_format($order->total_price), $data['content']);
-        }
-
-        if ($code != null) {
-            if (str_contains( $data['content'], '{{MA_DON_HANG}}')) {
-                $data['content'] = str_ireplace('{{MA_DON_HANG}}', $order->code, $data['content']);
-            }
-            if (str_contains( $data['subject'], '{{MA_DON_HANG}}')) {
-                $data['subject'] = str_ireplace('{{MA_DON_HANG}}', $order->code, $data['subject']);
-            }
-        }
-
-        if (str_contains( $data['subject'], '{{TEN_KHACH_HANG}}')) {
-            $data['subject'] = str_ireplace('{{TEN_KHACH_HANG}}', $user->name, $data['subject']);
-        }
-
-        if (str_contains( $data['subject'], '{{NGAY}}')) {
-            $data['subject'] = str_ireplace('{{NGAY}}', Carbon::now()->format('d/m/Y'), $data['subject']);
-        }
-
-        if (str_contains( $data['subject'], '{{LOAI}}')) {
-            $data['subject'] = str_ireplace('{{LOAI}}', $data['type'], $data['subject']);
-        }
-
-        return $data;
     }
+    public function cancelOrderRequest($id)
+    {
+        try {
+            $order = Order::find($id);
+            if($order) {
+                $order->status = Order::STATUS['CANCEL'];
+                $order->save();
+                return $this->responseSuccess();
+            } else {
+                return $this->responseError('Không tìm thấy đơn hàng!', [], 404);
+            }
+
+        } catch (Exception $e) {
+            Log::error('Error cancel request!', [
+                'method' => __METHOD__,
+                'message' => $e->getMessage(),
+                'line' => __LINE__
+            ]);
+            return $this->responseError();
+        }
+    }
+
 }

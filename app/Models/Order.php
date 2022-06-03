@@ -12,23 +12,21 @@ class Order extends Model
     protected $table = 'orders';
 
     const STATUS = [
-        'NO_PRICE' => 0,
-        'ALREADY_PRICE' => 1,
-        'TRANSLATING' => 2,
-        'TRANSLATION_DONE' => 3,
-        'REVIEWING' => 4,
-        'REVIEW_DONE' => 5,
-    ];
-
-    const TYPE = [
-        'TRANSLATE' => 0,
-        'REVIEW' => 1,
+        'REQUEST' => 0,
+        'CONFIRMED' => 1,
+        'SUCCESS' => 2,
+        'CANCEL' => 3,
     ];
 
     const PAYMENT_STATUS = [
         'UNPAID' => 0,
         'PAID' => 1,
         'WAiTING_PAYMENT' => 2,
+    ];
+
+    const TYPE = [
+        'OVERNIGHT' => 0,
+        'HOURS' => 1,
     ];
 
     const PAYMENT_TYPE = [
@@ -45,45 +43,25 @@ class Order extends Model
 
     protected $fillable = [
         'user_id',
-        'file_name',
-        'status',
+        'customer_name',
+        'room_id',
         'type',
-        'native_language_id',
-        'translate_language_id',
-        'deadline',
-        'return_date',
+        'status',
+        'order_date',
+        'checkin_time',
+        'checkout_time',
         'admin_id',
         'note',
         'payment_status',
         'payment_type',
-        'total_page',
-        'price_per_page',
+        'time',
+        'price',
         'total_price',
         'code',
         'order_bill_type',
-        'tax_code',
-        'company_name',
-        'company_address'
     ];
 
-    public function document()
-    {
-        return $this->hasOne(Document::class);
-    }
-    public function result()
-    {
-        return $this->hasMany(Document::class);
-    }
 
-    public function languageNative()
-    {
-        return $this->belongsTo(Language::class,'native_language_id');
-    }
-
-    public function languageTranslate()
-    {
-        return $this->belongsTo(Language::class,'translate_language_id');
-    }
     public function feedback()
     {
         return $this->hasOne(Feedback::class);

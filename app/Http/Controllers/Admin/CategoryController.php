@@ -106,4 +106,12 @@ class CategoryController extends Controller
         $count = Category::where('name', $categoryName)->count();
         return $count > 0;
     }
+
+    public function getAllCategories()
+    {
+        $query = Category::query();
+        $categories = $query->orderBy('is_highlight', 'DESC')->latest()->get();
+
+        return $this->responseSuccess($categories);
+    }
 }

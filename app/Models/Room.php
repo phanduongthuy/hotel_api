@@ -12,15 +12,16 @@ class Room extends Model
     protected $table = 'rooms';
     protected $fillable = [
         'name',
-        'price',
-        'image',
+        'category_id',
+        'priceOneHour',
+        'priceOneNight',
         'description',
         'is_highlight',
         'is_active',
     ];
     protected $dates = ['deleted_at'];
-    public function categories()
+    public function category()
     {
-        return $this->belongsToMany(Category::class)->withPivot('id', 'name');
+        return $this->belongsTo(Category::class);
     }
 }

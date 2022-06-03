@@ -26,7 +26,7 @@ class UserController extends Controller
         }
 
         $users = $query->orderBy('created_at', 'DESC')
-            ->paginate(config('constants.per_page'));
+            ->paginate(env('PER_PAGE'));
 
         return $this->responseSuccess($users);
     }

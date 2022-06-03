@@ -23,13 +23,13 @@ class RoomController extends Controller
         if ($request->has('is_highlight') && strlen($request->input('is_highlight')) > 0) {
             $query->where('is_highlight', (boolean)((int)$request->input('is_highlight')));
         }
-
-        if ($request->has('is_active') && strlen($request->input('is_active')) > 0) {
-            $query->where('is_active', (boolean)((int)$request->input('is_active')));
+        if ($request->has('category_id') && strlen($request->input('category_id')) > 0) {
+            $query->where('category_id', $request->input('category_id'));
         }
 
         $rooms = $query->orderBy('is_highlight', 'DESC')
             ->latest()
+            ->with('category')
             ->paginate(env('PER_PAGE'));
         return $this->responseSuccess($rooms);
     }
@@ -41,10 +41,13 @@ class RoomController extends Controller
 
             $room = new Room();
             $room->name = $request->input('name');
-            $room->price = $request->input('price');
+            $room->category_id = $request->input('category_id');
+            $room->priceOneHour = $request->input('priceOneHour');
+            $room->priceOneNight = $request->input('priceOneNight');
             $room->description = $request->input('description');
             $room->is_highlight = (boolean)$request->input('is_highlight');
             $room->is_active = true;
+
             $room->save();
 
             return $this->responseSuccess();
@@ -62,18 +65,24 @@ class RoomController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            $category = Category::find($id);
-            if ($category) {
-                $category->name = $request->input('name');
-                $category->description = $request->input('description');
-                $category->is_highlight = (boolean)$request->input('is_highlight');
-                $category->save();
+            $room = Room::find($id);
+            if ($room) {
+                $room->name = $request->input('name');
+                $room->category_id = $request->input('category_id');
+                $room->priceOneHour = $request->input('priceOneHour');
+                $room->priceOneNight = $request->input('priceOneNight');
+                $room->description = $request->input('description');
+                $room->is_highlight = (boolean)$request->input('is_highlight');
+
+                $room->save();
+
+
             } else {
-                return $this->responseError('Không có danh mục này trong hệ thống!', [], 404);
+                return $this->responseError('Không có phòng này trong hệ thống!', [], 404);
             }
             return $this->responseSuccess();
         } catch (\Exception $e) {
-            Log::error('Error update category', [
+            Log::error('Error update room', [
                 'method' => __METHOD__,
                 'message' => $e->getMessage(),
                 'line' => __LINE__
@@ -86,15 +95,15 @@ class RoomController extends Controller
     public function destroy($id)
     {
         try {
-            $category = Category::find($id);
+            $category = Room::find($id);
             if ($category) {
                 $category->delete();
                 return $this->responseSuccess();
             } else {
-                return $this->responseError('Category not found', [], 404);
+                return $this->responseError('Room not found', [], 404);
             }
         } catch (\Exception $e) {
-            Log::error('Error delete category', [
+            Log::error('Error delete room', [
                 'method' => __METHOD__,
                 'message' => $e->getMessage(),
                 'line' => __LINE__
@@ -104,9 +113,26 @@ class RoomController extends Controller
         }
     }
 
-    private function isExistCategory($categoryName)
+    public function activeRoom(Request $request, $id)
     {
-        $count = Category::where('name', $categoryName)->count();
-        return $count > 0;
+        try {
+            $product = Room::findOrFail($id);
+            if ($product) {
+                $product->is_active = (boolean)$request->input('is_active');
+                $product->save();
+            } else {
+                return $this->responseError('Không có phòng này trong hệ thống!', [], 404);
+            }
+
+            return $this->responseSuccess();
+        } catch (\Exception $e) {
+            Log::error('Error update room', [
+                'method' => __METHOD__,
+                'message' => $e->getMessage()
+            ]);
+
+            return $this->responseError();
+        }
     }
+
 }

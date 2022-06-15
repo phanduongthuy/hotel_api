@@ -119,13 +119,6 @@ Route::group(['middleware' => ['api']], function () {
                 Route::get('/get-data', [CommunicationController::class, 'getCommunation']);
             });
 
-            Route::group(['prefix' => 'language'], function () {
-                Route::get('/', [Admin\LanguageController::class, 'index']);
-                Route::post('/',[Admin\LanguageController::class,'store']);
-                Route::put('/{id}',[Admin\LanguageController::class,'update']);
-                Route::delete('/{id}',[Admin\LanguageController::class,'destroy']);
-            });
-
             Route::group(['prefix' => 'members'], function () {
                 Route::get('/', [MemberController::class, 'index']);
                 Route::post('/', [MemberController::class, 'store']);
@@ -156,6 +149,7 @@ Route::group(['middleware' => ['api']], function () {
 
             Route::group(['prefix' => 'rooms'],function(){
                 Route::get('/',[Admin\RoomController::class,'index']);
+                Route::get('/all',[Admin\RoomController::class,'getAllRoomActive']);
                 Route::post('/',[Admin\RoomController::class,'store']);
                 Route::put('/{id}',[Admin\RoomController::class,'update']);
                 Route::put('/{id}/active',[Admin\RoomController::class,'activeRoom']);

@@ -135,4 +135,11 @@ class RoomController extends Controller
         }
     }
 
+    public function getAllRoomActive()
+    {
+        $rooms = Room::where('is_active', true)->get();
+
+        return $this->responseSuccess($rooms);
+    }
+
 }

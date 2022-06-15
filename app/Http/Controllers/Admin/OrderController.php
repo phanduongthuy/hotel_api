@@ -9,6 +9,7 @@ use App\Models\Document;
 use App\Models\EmailTemplate;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Room;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -122,32 +123,9 @@ class OrderController extends Controller
                     $payment->money = $order->price_per_page * $order->total_page;
                     $payment->save();
 
-                    $emailTempUser = EmailTemplate::where('name', 'email-admin-update-confirm-payment')->first();
-                    $dataUser = $this->sendMailUpdate($user, substr($order->document->name, 13), $order,
-                        $emailTempUser, $order->code);
-                    Mail::to($dataUser['email'])->send(new NotificationAdminUpdateOrder($dataUser));
-                    if( Mail::failures()) {
-                        Log::error('Send fail mail notification update order info', [
-                            'method' => __METHOD__,
-                            'line' => __LINE__,
-                        ]);
-                    }
                 }
             }
             $order->save();
-            if (!$request->input('payment_status')) {
-                $linkDowload = env('APP_URL'). '/api/download-file/' . $order->document->_id;
-                $emailTempUser = EmailTemplate::where('name', 'email-admin-update-order-info')->first();
-                $dataUser = $this->sendMailUpdate($user, substr($order->document->name, 13), $order,
-                    $emailTempUser, null,  $linkDowload);
-                Mail::to($dataUser['email'])->send(new NotificationAdminUpdateOrder($dataUser));
-                if( Mail::failures()) {
-                    Log::error('Send fail mail notification update order info', [
-                        'method' => __METHOD__,
-                        'line' => __LINE__,
-                    ]);
-                }
-            }
 
             return $this->responseSuccess();
         }catch (Exception $e) {
@@ -236,15 +214,21 @@ class OrderController extends Controller
         }
     }
 
-    public function confirmOrderRequest($id)
+    public function confirmOrderRequest(Request $request, $id)
     {
         try {
             $order = Order::find($id);
             if($order) {
                 $order->status = Order::STATUS['CONFIRMED'];
                 $order->checkin_time = Carbon::now()->timestamp;
+                $order->note = $request->input('note');
+                $order->room_id = $request->input('room_id');
                 $order->admin_id = Auth()->guard('admins')->user()->_id;;
                 $order->save();
+
+                $room = Room::find($order->room_id);
+                $room->is_active = false;
+                $room->save();
                 return $this->responseSuccess();
             } else {
                 return $this->responseError('Không tìm thấy đơn hàng!', [], 404);
@@ -259,12 +243,13 @@ class OrderController extends Controller
             return $this->responseError();
         }
     }
-    public function cancelOrderRequest($id)
+    public function cancelOrderRequest(Request $request, $id)
     {
         try {
             $order = Order::find($id);
             if($order) {
                 $order->status = Order::STATUS['CANCEL'];
+                $order->note = $request->input('note');
                 $order->save();
                 return $this->responseSuccess();
             } else {
